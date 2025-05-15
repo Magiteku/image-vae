@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 from datasets import load_dataset
 import cv2
-from sklearn.model_selection import train_test_split
 
 def load_image_data(image_config, max_samples=10000):
     """Load and preprocess image dataset.
@@ -35,43 +34,23 @@ def load_image_data(image_config, max_samples=10000):
         if len(processed_images) >= max_samples:
             break
     
-    # Split into train and validation
-    train_images, val_images = train_test_split(processed_images, test_size=0.1, random_state=42)
+    # Convert to numpy array
+    processed_images = np.array(processed_images)
     
-    # Add more diversity by incorporating some higher-resolution images from a different dataset
-    try:
-        print("Loading Oxford Flowers dataset for additional image diversity...")
-        flowers_dataset = load_dataset("oxford-flowers-102", split="train")
-        
-        additional_images = []
-        for i, item in enumerate(flowers_dataset):
-            if i >= len(val_images):  # Match validation size
-                break
-                
-            img = item["image"]
-            img_array = np.array(img)
-            
-            # Handle grayscale images
-            if len(img_array.shape) == 2:
-                img_array = np.stack([img_array] * 3, axis=-1)
-            elif img_array.shape[2] == 4:  # Handle RGBA
-                img_array = img_array[:, :, :3]
-                
-            img_resized = cv2.resize(img_array, image_config.image_size)
-            img_normalized = img_resized.astype(np.float32) / 255.0
-            
-            additional_images.append(img_normalized)
-            
-            if len(additional_images) >= len(val_images):
-                break
-                
-        # Replace half of validation set with flowers for diversity
-        if additional_images:
-            replace_count = min(len(val_images) // 2, len(additional_images))
-            val_images[:replace_count] = additional_images[:replace_count]
-            
-    except Exception as e:
-        print(f"Error loading additional image dataset: {e}")
-        print("Continuing with CIFAR-100 only")
+    # Manually split into train and validation (90/10)
+    num_samples = len(processed_images)
+    num_val = int(num_samples * 0.1)
     
-    return np.array(train_images), np.array(val_images)
+    # Shuffle the data
+    indices = np.random.permutation(num_samples)
+    train_indices = indices[num_val:]
+    val_indices = indices[:num_val]
+    
+    train_images = processed_images[train_indices]
+    val_images = processed_images[val_indices]
+    
+    print(f"Data loaded: {len(train_images)} training, {len(val_images)} validation samples")
+    
+    # Skip the Oxford Flowers dataset to avoid potential issues
+    
+    return train_images, val_images
