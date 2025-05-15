@@ -34,6 +34,8 @@ class ImageVAEConfig(Config):
         
         super().__init__(**kwargs)
 
+
+
 class BottleneckConfig(Config):
     """Configuration for the bottleneck layers."""
     def __init__(
