@@ -15,7 +15,7 @@ class MultiLayerBottleneck(tf.keras.layers.Layer):
         # Define activation function
         if config.activation == "leaky_relu":
             self.activation_fn = lambda x: tf.keras.layers.LeakyReLU(
-                alpha=config.leaky_alpha
+                negative_slope=config.leaky_alpha  # Updated from alpha to negative_slope
             )(x)
         else:
             self.activation_fn = lambda x: tf.keras.activations.get(config.activation)(x)
@@ -46,18 +46,27 @@ class MultiLayerBottleneck(tf.keras.layers.Layer):
         
     def reparameterize(self, mean, logvar):
         """Implement reparameterization trick for VAE."""
-        eps = tf.random.normal(shape=tf.shape(mean))
-        return mean + tf.exp(0.5 * logvar) * eps
+        # Get the dtype of the input tensors
+        dtype = mean.dtype
+        
+        # Use the same dtype for the random noise
+        eps = tf.random.normal(shape=tf.shape(mean), dtype=dtype)
+        
+        # Ensure calculations maintain the same precision
+        return mean + tf.cast(tf.exp(0.5 * logvar), dtype) * eps
     
     def complex_reparameterize(self, mean_real, mean_imag, logvar_real, logvar_imag):
         """Complex version of the reparameterization trick."""
-        # Sample real and imaginary parts independently
-        eps_real = tf.random.normal(shape=tf.shape(mean_real))
-        eps_imag = tf.random.normal(shape=tf.shape(mean_imag))
+        # Get dtype from inputs
+        dtype = mean_real.dtype
         
-        # Compute real and imaginary parts of the sample
-        real = mean_real + tf.exp(0.5 * logvar_real) * eps_real
-        imag = mean_imag + tf.exp(0.5 * logvar_imag) * eps_imag
+        # Sample real and imaginary parts with matching dtype
+        eps_real = tf.random.normal(shape=tf.shape(mean_real), dtype=dtype)
+        eps_imag = tf.random.normal(shape=tf.shape(mean_imag), dtype=dtype)
+        
+        # Compute real and imaginary parts of the sample with consistent types
+        real = mean_real + tf.cast(tf.exp(0.5 * logvar_real), dtype) * eps_real
+        imag = mean_imag + tf.cast(tf.exp(0.5 * logvar_imag), dtype) * eps_imag
         
         # Return as separate real and imaginary components
         return real, imag
