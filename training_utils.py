@@ -59,7 +59,7 @@ def prepare_callbacks(model, config):
     # Model checkpointing
     callbacks.append(
         tf.keras.callbacks.ModelCheckpoint(
-            filepath="checkpoints/image_vae/model_{epoch:02d}",
+            filepath="checkpoints/image_vae/model_{epoch:02d}.keras",
             save_weights_only=False,
             save_best_only=True,
             monitor="val_total",
