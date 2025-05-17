@@ -69,12 +69,13 @@ def prepare_callbacks(model, config):
     
     # Early stopping
     callbacks.append(
-        tf.keras.callbacks.EarlyStopping(
-            monitor="val_total",
-            patience=10,
-            restore_best_weights=True
-        )
+    tf.keras.callbacks.EarlyStopping(
+        monitor="val_total",
+        patience=10,
+        restore_best_weights=True,
+        mode='min'  # Add this parameter to specify we want to minimize the monitored metric
     )
+)
     
     return callbacks
 
