@@ -107,7 +107,7 @@ class ImageVAE(tf.keras.Model):
             
             # Update KL weight according to curriculum
             if self.config.curriculum_steps > 0:
-                progress = tf.cast(self.step_counter, tf.float32) / self.config.curriculum_steps
+                progress = tf.cast(self.step_counter, self.kl_weight.dtype) / self.config.curriculum_steps
                 progress = tf.minimum(progress, 1.0)
                 self.kl_weight.assign(progress * self.config.kl_weight)
         
@@ -164,6 +164,9 @@ class ImageVAE(tf.keras.Model):
         
         # Compute KL divergence loss
         kl_loss = self.compute_kl_loss(mean, logvar)
+        
+        # Cast kl_loss to match kl_weight's dtype for compatibility
+        kl_loss = tf.cast(kl_loss, self.kl_weight.dtype)
         
         # Compute total loss
         total_loss = recon_loss + self.kl_weight * kl_loss
