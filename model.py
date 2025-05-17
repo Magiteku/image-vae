@@ -165,11 +165,17 @@ class ImageVAE(tf.keras.Model):
         # Compute KL divergence loss
         kl_loss = self.compute_kl_loss(mean, logvar)
         
-        # Cast kl_loss to match kl_weight's dtype for compatibility
-        kl_loss = tf.cast(kl_loss, self.kl_weight.dtype)
+        # Cast kl_loss to match kl_weight's dtype for compatibility with multiplication
+        kl_loss_float32 = tf.cast(kl_loss, self.kl_weight.dtype)
+        
+        # Compute weighted KL loss in float32
+        weighted_kl_loss = self.kl_weight * kl_loss_float32
+        
+        # Cast weighted KL loss back to same dtype as recon_loss for addition
+        weighted_kl_loss = tf.cast(weighted_kl_loss, recon_loss.dtype)
         
         # Compute total loss
-        total_loss = recon_loss + self.kl_weight * kl_loss
+        total_loss = recon_loss + weighted_kl_loss
         
         return total_loss, {
             "reconstruction": recon_loss,
