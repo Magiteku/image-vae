@@ -114,17 +114,9 @@ def train_image_vae(model, train_data, val_data, config, epochs=100, batch_size=
     return history
 
 def visualize_reconstructions(model, images, n_samples=10):
-    """Visualize original images and their reconstructions.
-    
-    Args:
-        model: Trained ImageVAE model
-        images: Array of input images
-        n_samples: Number of samples to visualize
-        
-    Returns:
-        Matplotlib figure with original and reconstructed images
-    """
+    """Visualize original images and their reconstructions."""
     import matplotlib.pyplot as plt
+    import numpy as np
     
     # Limit the number of samples
     images = images[:n_samples]
@@ -132,18 +124,22 @@ def visualize_reconstructions(model, images, n_samples=10):
     # Get reconstructions
     reconstructions, _, _, _ = model(images, training=False)
     
+    # Convert tensors to numpy arrays with supported dtype
+    images_np = tf.cast(images, tf.float32).numpy()
+    reconstructions_np = tf.cast(reconstructions, tf.float32).numpy()
+    
     # Create figure
     fig, axes = plt.subplots(2, n_samples, figsize=(n_samples * 2, 4))
     
     # Plot original images
     for i in range(n_samples):
-        axes[0, i].imshow(images[i])
+        axes[0, i].imshow(images_np[i])
         axes[0, i].set_title("Original")
         axes[0, i].axis("off")
     
     # Plot reconstructions
     for i in range(n_samples):
-        axes[1, i].imshow(reconstructions[i])
+        axes[1, i].imshow(reconstructions_np[i])
         axes[1, i].set_title("Reconstructed")
         axes[1, i].axis("off")
     
@@ -151,20 +147,15 @@ def visualize_reconstructions(model, images, n_samples=10):
     return fig
 
 def visualize_samples(model, n_samples=10, grid_size=None):
-    """Visualize random samples from the latent space.
-    
-    Args:
-        model: Trained ImageVAE model
-        n_samples: Number of samples to generate
-        grid_size: Optional (rows, cols) for the grid layout
-        
-    Returns:
-        Matplotlib figure with generated samples
-    """
+    """Visualize random samples from the latent space."""
     import matplotlib.pyplot as plt
+    import numpy as np
     
     # Generate samples
     samples = model.sample(n_samples)
+    
+    # Convert to numpy with supported dtype
+    samples_np = tf.cast(samples, tf.float32).numpy()
     
     # Determine grid size
     if grid_size is None:
@@ -183,7 +174,7 @@ def visualize_samples(model, n_samples=10, grid_size=None):
                     ax = axes[j]
                 else:
                     ax = axes[i, j]
-                ax.imshow(samples[sample_idx])
+                ax.imshow(samples_np[sample_idx])
                 ax.axis("off")
                 sample_idx += 1
     
@@ -247,28 +238,22 @@ def visualize_latent_space(model, images, labels=None, n_samples=1000):
     return fig
 
 def visualize_interpolation(model, img_a, img_b, steps=10):
-    """Visualize interpolation between two images in latent space.
-    
-    Args:
-        model: Trained ImageVAE model
-        img_a: First image
-        img_b: Second image
-        steps: Number of interpolation steps
-        
-    Returns:
-        Matplotlib figure with interpolated images
-    """
+    """Visualize interpolation between two images in latent space."""
     import matplotlib.pyplot as plt
+    import numpy as np
     
     # Get interpolated images
     interpolated_images = model.interpolate(img_a, img_b, steps)
+    
+    # Convert to numpy arrays with supported dtype
+    interpolated_np = [tf.cast(img, tf.float32).numpy() for img in interpolated_images]
     
     # Create figure
     fig, axes = plt.subplots(1, steps, figsize=(steps * 2, 2))
     
     # Plot interpolated images
     for i in range(steps):
-        axes[i].imshow(interpolated_images[i])
+        axes[i].imshow(interpolated_np[i])
         axes[i].axis("off")
         if i == 0:
             axes[i].set_title("Start")
