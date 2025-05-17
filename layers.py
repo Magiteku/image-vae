@@ -37,13 +37,24 @@ class MultiLayerBottleneck(tf.keras.layers.Layer):
         if self.use_complex:
             self._init_complex_layers()
     
+    
     def _init_complex_layers(self):
         """Initialize complex-valued operations for the bottleneck."""
         # For simplicity, we'll use a proxy approach with real-valued networks
         # but structure the computation to mimic complex operations
         self.real_linear = tf.keras.layers.Dense(self.dim, name="real_linear")
         self.imag_linear = tf.keras.layers.Dense(self.dim, name="imag_linear")
-        
+    
+    def build(self, input_shape):
+        # If input is a tuple of (mean, logvar), get their shape
+        if isinstance(input_shape, list) and len(input_shape) == 2:
+            shape = input_shape[0]
+        else:
+            shape = input_shape
+            
+        # The shape is now known, so build can be called
+        self.built = True
+
     def reparameterize(self, mean, logvar):
         """Implement reparameterization trick for VAE."""
         # Get the dtype of the input tensors
