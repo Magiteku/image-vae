@@ -259,14 +259,17 @@ class ImageVAE(tf.keras.Model):
         mean_a, logvar_a, latent_a = self.encode(tf.expand_dims(img_a, 0))
         mean_b, logvar_b, latent_b = self.encode(tf.expand_dims(img_b, 0))
         
-        # Create interpolation weights
-        alphas = tf.linspace(0.0, 1.0, steps)
+        # Get the dtype of the latent vectors to ensure type consistency
+        dtype = latent_a.dtype
+        
+        # Create interpolation weights with matching dtype
+        alphas = tf.cast(tf.linspace(0.0, 1.0, steps), dtype)
         
         # Interpolate and generate
         outputs = []
         
         for alpha in alphas:
-            # Linear interpolation
+            # Linear interpolation with matching types
             latent_interp = (1 - alpha) * latent_a + alpha * latent_b
             
             # Generate outputs
