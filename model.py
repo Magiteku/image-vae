@@ -345,7 +345,7 @@ class ImageVAE(tf.keras.Model):
     def save_model(self, filepath):
         """Save model to disk using TensorFlow SavedModel format."""
         # Save the model weights
-        self.save_weights(filepath + "_weights.h5")
+        self.save_weights(filepath + ".weights.h5")
         
         # Save the model config
         import json
