@@ -364,7 +364,7 @@ class ImageVAE(tf.keras.Model):
         model = cls.from_config(config)
         
         # Load the weights
-        model.load_weights(filepath + "_weights.h5")
+        model.load_weights(filepath + ".weights.h5")
         
         return model
     
