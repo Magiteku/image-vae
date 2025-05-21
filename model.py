@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from config import ImageVAEConfig
+from config import ImageVAEConfig, ImageEncoderDecoderConfig
 from encoder import ImageEncoder
 from decoder import ImageDecoder
 from layers import MultiLayerBottleneck
@@ -49,6 +49,55 @@ class ImageVAE(tf.keras.Model):
             for _ in range(config.num_bottleneck_layers)
         ]
     
+    def get_config(self):
+        """Return configuration of the model for serialization."""
+        config = super().get_config()
+        # Add custom configuration parameters
+        config.update({
+            "config": {
+                "latent_dim": self.config.latent_dim,
+                "num_bottleneck_layers": self.config.num_bottleneck_layers,
+                "use_complex_bottleneck": self.config.use_complex_bottleneck,
+                "kl_weight": self.config.kl_weight,
+                "curriculum_steps": self.config.curriculum_steps,
+                "image_config": {
+                    "latent_dim": self.config.image_config.latent_dim,
+                    "image_size": self.config.image_config.image_size,
+                    "channels": self.config.image_config.channels,
+                    "use_vit": self.config.image_config.use_vit,
+                    "cnn_base_filters": self.config.image_config.cnn_base_filters,
+                    "cnn_layers": self.config.image_config.cnn_layers,
+                    "dropout_rate": self.config.image_config.dropout_rate
+                }
+            }
+        })
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        """Create model from configuration dictionary."""
+        # Extract the custom config
+        model_config = config.get("config", {})
+        
+        # Recreate the image config
+        image_config_dict = model_config.get("image_config", {})
+        image_config = ImageEncoderDecoderConfig(**image_config_dict)
+        
+        # Recreate the main config
+        vae_config = ImageVAEConfig(
+            latent_dim=model_config.get("latent_dim", 256),
+            num_bottleneck_layers=model_config.get("num_bottleneck_layers", 2),
+            use_complex_bottleneck=model_config.get("use_complex_bottleneck", False),
+            kl_weight=model_config.get("kl_weight", 0.001),
+            curriculum_steps=model_config.get("curriculum_steps", 10000),
+            image_config=image_config
+        )
+        
+        # Create a new model instance
+        model = cls(vae_config)
+        
+        return model
+
     def encode(self, inputs, training=False):
         """Encode inputs to latent space.
         
@@ -295,9 +344,49 @@ class ImageVAE(tf.keras.Model):
     
     def save_model(self, filepath):
         """Save model to disk using TensorFlow SavedModel format."""
-        self.save(filepath)
+        # Save the model weights
+        self.save_weights(filepath + "_weights.h5")
         
+        # Save the model config
+        import json
+        with open(filepath + "_config.json", "w") as f:
+            json.dump(self.get_config(), f)
+
     @classmethod
     def load_model(cls, filepath):
         """Load model from disk."""
-        return tf.keras.models.load_model(filepath)
+        # Load the config
+        import json
+        with open(filepath + "_config.json", "r") as f:
+            config = json.load(f)
+        
+        # Create a new model from config
+        model = cls.from_config(config)
+        
+        # Load the weights
+        model.load_weights(filepath + "_weights.h5")
+        
+        return model
+    
+    def save_model_weights(self, filepath):
+        """Save model weights to disk."""
+        self.save_weights(filepath)
+    
+    @classmethod
+    def load_model_weights(cls, config, filepath):
+        """Load model from weights.
+        
+        Args:
+            config: An ImageVAEConfig instance
+            filepath: Path to the saved weights
+        """
+        model = cls(config)
+        
+        # Initialize with a dummy input
+        dummy_input = tf.zeros((1, *config.image_config.image_size, config.image_config.channels))
+        _ = model(dummy_input)
+        
+        # Load weights
+        model.load_weights(filepath)
+        
+        return model
