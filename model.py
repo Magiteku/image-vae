@@ -354,19 +354,46 @@ class ImageVAE(tf.keras.Model):
 
     @classmethod
     def load_model(cls, filepath):
-        """Load model from disk."""
-        # Load the config
+        """Load model from disk with proper model building.
+        
+        This method now correctly builds the model before loading weights,
+        which is required by TensorFlow/Keras.
+        """
+        # Load the configuration from the saved JSON file
         import json
+        print(f"Loading model configuration from {filepath}_config.json...")
+        
         with open(filepath + "_config.json", "r") as f:
             config = json.load(f)
         
-        # Create a new model from config
+        # Create a new model instance from the configuration
+        print("Creating model from configuration...")
         model = cls.from_config(config)
         
-        # Load the weights
+        # CRITICAL FIX: Build the model before loading weights
+        # TensorFlow needs to know the exact architecture before it can load weights
+        print("Building model architecture...")
+        
+        # Create dummy input data with the correct shape and data type
+        # This tells TensorFlow exactly what the input will look like
+        dummy_input = tf.zeros(
+            shape=(1, *model.config.image_config.image_size, model.config.image_config.channels),
+            dtype=tf.float32,
+            name="dummy_input_for_building"
+        )
+        
+        # Perform a forward pass to build all internal layers
+        # This creates the computational graph and determines all tensor shapes
+        print("Running forward pass to build computational graph...")
+        _ = model(dummy_input, training=False)
+        
+        # Now the model is "built" and we can safely load the weights
+        print(f"Loading weights from {filepath}.weights.h5...")
         model.load_weights(filepath + ".weights.h5")
         
+        print("Model loaded successfully!")
         return model
+    
     
     def save_model_weights(self, filepath):
         """Save model weights to disk."""

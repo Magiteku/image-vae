@@ -12,13 +12,19 @@ class MultiLayerBottleneck(tf.keras.layers.Layer):
         self.dim = config.latent_dim
         self.use_complex = config.use_complex
         
-        # Define activation function
+       # FIXED: Define activation function properly to avoid deprecation warnings
         if config.activation == "leaky_relu":
-            self.activation_fn = lambda x: tf.keras.layers.LeakyReLU(
-                negative_slope=config.leaky_alpha  # Updated from alpha to negative_slope
-            )(x)
+            # Create the activation layer once during initialization
+            # This prevents the warning from appearing every time the layer is used
+            self.activation_layer = tf.keras.layers.LeakyReLU(
+                negative_slope=config.leaky_alpha,  # Use the correct parameter name
+                name="bottleneck_leaky_relu"
+            )
+            # Wrap it in a simple function for consistent interface
+            self.activation_fn = self.activation_layer
         else:
-            self.activation_fn = lambda x: tf.keras.activations.get(config.activation)(x)
+            # For other activations, use the standard approach
+            self.activation_fn = tf.keras.activations.get(config.activation)
         
         # Define layers
         self.linear1 = tf.keras.layers.Dense(self.dim, name="bottleneck_linear1")
