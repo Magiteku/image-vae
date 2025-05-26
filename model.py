@@ -174,8 +174,13 @@ class ImageVAE(tf.keras.Model):
         """
         # MSE or binary cross entropy for images
         # Use binary cross entropy as default for image data in [0, 1] range
+        """
         loss = tf.reduce_mean(
             tf.keras.losses.binary_crossentropy(inputs, outputs)
+        )
+        """
+        loss = tf.reduce_mean(
+            tf.square(inputs - outputs)
         )
         
         return loss
@@ -394,7 +399,7 @@ class ImageVAE(tf.keras.Model):
         print("Model loaded successfully!")
         return model
     
-    
+
     def save_model_weights(self, filepath):
         """Save model weights to disk."""
         self.save_weights(filepath)
