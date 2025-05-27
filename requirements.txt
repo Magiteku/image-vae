@@ -29,7 +29,7 @@ gast==0.6.0
 google-pasta==0.2.0
 grpcio==1.71.0
 h5py==3.13.0
-hub==3.0.6
+deeplake
 huggingface-hub==0.30.2
 idna==3.10
 immutabledict==4.2.1

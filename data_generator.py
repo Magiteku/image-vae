@@ -47,10 +47,10 @@ def create_data_generators(image_config, batch_size=32, max_samples=5000, datase
     
     # Load image data based on dataset type
     if dataset_type.lower() == "ffhq":
-        # Load FFHQ dataset from Hub
+        # Load FFHQ dataset from Deep Lake
         train_images, val_images = load_image_data(
             image_config, 
-            source_type="hub", 
+            source_type="deeplake", 
             source="ffhq", 
             max_samples=max_samples
         )

@@ -39,8 +39,8 @@ def load_image_data(image_config, source_type="tf_builtin", source="cifar100", m
     elif source_type == "file_list":
         # Load from a file containing paths to images
         return _load_from_file_list(image_config, source, max_samples, val_split, **kwargs)
-    elif source_type == "hub":
-        # Load from Hub (ActiveLoop) datasets like FFHQ
+    elif source_type == "hub" or source_type == "deeplake":
+        # Load from Deep Lake (ActiveLoop) datasets
         return _load_from_hub(image_config, source, max_samples, val_split, **kwargs)
     else:
         raise ValueError(f"Unknown source type: {source_type}")
@@ -73,7 +73,7 @@ def _preprocess_image(img, target_size, normalize=True):
     return img_resized
 
 def _load_from_hub(image_config, dataset_name, max_samples, val_split=0.1, **kwargs):
-    """Load images from Hub (ActiveLoop) datasets.
+    """Load images from Hub (ActiveLoop) datasets with robust fallbacks.
     
     Args:
         image_config: Configuration containing image size
@@ -84,85 +84,201 @@ def _load_from_hub(image_config, dataset_name, max_samples, val_split=0.1, **kwa
     Returns:
         Tuple of (train_images, val_images) as numpy arrays
     """
-    try:
-        import hub
-        print(f"Loading {dataset_name} dataset from Hub...")
+    if dataset_name.lower() == "ffhq":
+        return load_ffhq_with_fallbacks(image_config, max_samples, val_split)
+    else:
+        # For other datasets, use the basic hub loading
+        try:
+            import hub
+            print(f"Loading {dataset_name} dataset from Hub...")
+            ds = hub.load(f"hub://activeloop/{dataset_name}")
+            # ... rest of the loading logic would go here
+        except Exception as e:
+            print(f"Error loading {dataset_name} from Hub: {e}")
+            print("Falling back to CIFAR-100...")
+            return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+
+def _load_from_hub(image_config, dataset_name, max_samples, val_split=0.1, **kwargs):
+    """Load images from Deep Lake (ActiveLoop) datasets.
+    
+    Args:
+        image_config: Configuration containing image size
+        dataset_name: Name of Deep Lake dataset ('ffhq', etc.)
+        max_samples: Maximum number of samples to load
+        val_split: Fraction of data to use for validation
         
-        # Load the dataset
-        if dataset_name.lower() == "ffhq":
-            # Load FFHQ dataset from Hub
-            ds = hub.load("hub://activeloop/ffhq")
-            print(f"FFHQ dataset loaded. Total samples: {len(ds)}")
-            
-            # Limit samples if specified
-            total_samples = min(len(ds), max_samples)
-            indices = np.random.choice(len(ds), total_samples, replace=False)
-            
-            print(f"Processing {total_samples} samples...")
-            processed_images = []
-            
-            for i, idx in enumerate(indices):
-                if i % 1000 == 0:
-                    print(f"Processed {i}/{total_samples} images...")
-                    
-                try:
-                    # Get image from dataset
-                    img_data = ds[int(idx)]
-                    
-                    # Extract image array
-                    if hasattr(img_data, 'images'):
-                        img = img_data.images.numpy()
-                    elif hasattr(img_data, 'image'):
-                        img = img_data.image.numpy()
-                    else:
-                        # If it's just the image directly
-                        img = img_data.numpy()
-                    
-                    # Ensure img is in the right format
-                    if img.dtype == np.uint8:
-                        img = img.astype(np.float32)
-                    
-                    # Preprocess image
-                    processed_img = _preprocess_image(img, image_config.image_size)
-                    processed_images.append(processed_img)
-                    
-                except Exception as e:
-                    print(f"Error processing image {idx}: {e}")
-                    continue
-            
-            print(f"Successfully processed {len(processed_images)} images")
-            
+    Returns:
+        Tuple of (train_images, val_images) as numpy arrays
+    """
+    if dataset_name.lower() == "ffhq":
+        return load_ffhq_with_deeplake(image_config, max_samples, val_split)
+    else:
+        # For other datasets, fall back to CIFAR-100
+        print(f"Dataset {dataset_name} not supported yet. Falling back to CIFAR-100...")
+        return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+
+def load_ffhq_with_deeplake(image_config, max_samples=10000, val_split=0.1):
+    """Load FFHQ using Deep Lake (the correct ActiveLoop method)."""
+    
+    print("🔄 Loading FFHQ dataset using Deep Lake...")
+    
+    try:
+        import deeplake
+        print("✅ Deep Lake library imported successfully")
+        
+        # Load FFHQ dataset from Deep Lake
+        print("📦 Loading FFHQ from hub://activeloop/ffhq...")
+        ds = deeplake.load("hub://activeloop/ffhq")
+        
+        print(f"✅ FFHQ dataset loaded successfully!")
+        print(f"📊 Dataset info:")
+        print(f"   Total samples: {len(ds)}")
+        print(f"   Available tensors: {list(ds.tensors.keys())}")
+        
+        # Choose appropriate image resolution based on target size
+        target_size = image_config.image_size[0]  # Assuming square images
+        
+        if target_size <= 128:
+            # Use 128x128 images
+            image_tensor = ds.images_128.image
+            print(f"🎯 Using 128x128 images (target: {target_size}x{target_size})")
         else:
-            raise ValueError(f"Unknown Hub dataset: {dataset_name}")
+            # Use 1024x1024 images
+            image_tensor = ds.images_1024.image
+            print(f"🎯 Using 1024x1024 images (target: {target_size}x{target_size})")
+        
+        # Limit samples
+        total_samples = min(len(image_tensor), max_samples)
+        print(f"🔢 Processing {total_samples} samples...")
+        
+        # Create train/validation split (first 60k for train, rest for val)
+        if total_samples > 60000:
+            train_end = 60000
+            val_start = 60000
+        else:
+            train_end = int(total_samples * (1 - val_split))
+            val_start = train_end
+        
+        # Process training images
+        print("🏋️ Processing training images...")
+        train_images = []
+        for i in range(min(train_end, total_samples)):
+            if i % 1000 == 0:
+                print(f"   Processed {i}/{min(train_end, total_samples)} training images...")
             
+            try:
+                # Get image as numpy array
+                img = image_tensor[i].numpy()
+                
+                # Preprocess image
+                processed_img = _preprocess_image(img, image_config.image_size)
+                train_images.append(processed_img)
+                
+            except Exception as e:
+                print(f"⚠️ Error processing training image {i}: {e}")
+                continue
+        
+        # Process validation images
+        print("🧪 Processing validation images...")
+        val_images = []
+        val_end = min(total_samples, val_start + int(total_samples * val_split))
+        
+        for i in range(val_start, val_end):
+            if (i - val_start) % 500 == 0:
+                print(f"   Processed {i - val_start}/{val_end - val_start} validation images...")
+            
+            try:
+                # Get image as numpy array
+                img = image_tensor[i].numpy()
+                
+                # Preprocess image
+                processed_img = _preprocess_image(img, image_config.image_size)
+                val_images.append(processed_img)
+                
+            except Exception as e:
+                print(f"⚠️ Error processing validation image {i}: {e}")
+                continue
+        
+        # Convert to numpy arrays
+        train_images = np.array(train_images)
+        val_images = np.array(val_images)
+        
+        print(f"✅ FFHQ loading completed successfully!")
+        print(f"📊 Final dataset statistics:")
+        print(f"   Training samples: {len(train_images)}")
+        print(f"   Validation samples: {len(val_images)}")
+        print(f"   Training shape: {train_images.shape}")
+        print(f"   Validation shape: {val_images.shape}")
+        
+        return train_images, val_images
+        
     except ImportError:
-        print("Warning: hub library not installed. Please install with: pip install hub")
-        print("Falling back to CIFAR-100...")
-        return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+        print("❌ Deep Lake library not installed")
+        print("💡 Install with: pip install deeplake")
+        print("🔄 Falling back to CelebA dataset...")
+        return load_celeba_fallback(image_config, max_samples, val_split)
+    
     except Exception as e:
-        print(f"Error loading from Hub: {e}")
-        print("Falling back to CIFAR-100...")
-        return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+        print(f"❌ Error loading FFHQ with Deep Lake: {e}")
+        print("🔄 Falling back to CelebA dataset...")
+        return load_celeba_fallback(image_config, max_samples, val_split)
+
+def load_celeba_fallback(image_config, max_samples, val_split):
+    """Load CelebA as a high-quality face dataset fallback."""
+    try:
+        print("\n📦 Loading CelebA dataset as FFHQ alternative...")
+        import tensorflow_datasets as tfds
+        
+        ds = tfds.load('celeb_a', split='train', as_supervised=False)
+        
+        print("✅ CelebA loaded successfully")
+        
+        processed_images = []
+        count = 0
+        
+        for sample in ds:
+            if count >= max_samples:
+                break
+                
+            if count % 1000 == 0:
+                print(f"   Processed {count}/{max_samples} CelebA images...")
+            
+            try:
+                img = sample['image'].numpy()
+                processed_img = _preprocess_image(img, image_config.image_size)
+                processed_images.append(processed_img)
+                count += 1
+            except Exception:
+                continue
+        
+        if len(processed_images) > 0:
+            # Split data
+            num_samples = len(processed_images)
+            num_val = int(num_samples * val_split)
+            
+            indices = np.random.permutation(num_samples)
+            train_indices = indices[num_val:]
+            val_indices = indices[:num_val]
+            
+            train_images = np.array([processed_images[i] for i in train_indices])
+            val_images = np.array([processed_images[i] for i in val_indices])
+            
+            print("✅ CelebA loaded as FFHQ alternative")
+            return train_images, val_images
+        
+    except Exception as e:
+        print(f"❌ CelebA fallback also failed: {e}")
     
-    # Split into train and validation sets
-    num_samples = len(processed_images)
-    num_val = int(num_samples * val_split)
+    # Final fallback to CIFAR-100
+    print("\n⚠️ All face dataset methods failed. Using CIFAR-100.")
+    print("   Note: This will not produce good face generation results.")
     
-    # Shuffle indices
-    indices = np.random.permutation(num_samples)
-    train_indices = indices[num_val:]
-    val_indices = indices[:num_val]
-    
-    train_images = np.array([processed_images[i] for i in train_indices])
-    val_images = np.array([processed_images[i] for i in val_indices])
-    
-    print(f"Data split complete:")
-    print(f"  Training samples: {len(train_images)}")
-    print(f"  Validation samples: {len(val_images)}")
-    print(f"  Training shape: {train_images.shape}")
-    print(f"  Validation shape: {val_images.shape}")
-    
-    return train_images, val_images
+    return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+
+# Alias for backward compatibility
+def load_ffhq_with_fallbacks(image_config, max_samples=10000, val_split=0.1):
+    """Alias for load_ffhq_with_deeplake - kept for backward compatibility."""
+    return load_ffhq_with_deeplake(image_config, max_samples, val_split)
 
 def _load_from_tf_builtin(image_config, dataset_name, max_samples):
     """Load images from TensorFlow's built-in datasets.
