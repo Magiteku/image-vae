@@ -97,7 +97,8 @@ def train_image_vae(model, train_data, val_data, config, epochs=100, batch_size=
     model.compile(
         optimizer=tf.keras.optimizers.Adam(
             learning_rate=5e-4,
-            beta_1 = 0.5),
+            beta_1 = 0.5,
+            beta_2 = 0.999),
         run_eagerly=False  # Set to True for debugging
     )
     
