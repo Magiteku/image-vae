@@ -11,7 +11,7 @@ def load_image_data(image_config, source_type="tf_builtin", source="cifar100", m
     
     Args:
         image_config: Configuration for image encoder/decoder
-        source_type: Type of data source ('tf_builtin', 'tfds', 'directory', 'file_list')
+        source_type: Type of data source ('tf_builtin', 'tfds', 'directory', 'file_list', 'hub')
         source: Specific source (dataset name, directory path, file path)
         max_samples: Maximum number of samples to load
         val_split: Fraction of data to use for validation (if not predefined)
@@ -39,6 +39,9 @@ def load_image_data(image_config, source_type="tf_builtin", source="cifar100", m
     elif source_type == "file_list":
         # Load from a file containing paths to images
         return _load_from_file_list(image_config, source, max_samples, val_split, **kwargs)
+    elif source_type == "hub":
+        # Load from Hub (ActiveLoop) datasets like FFHQ
+        return _load_from_hub(image_config, source, max_samples, val_split, **kwargs)
     else:
         raise ValueError(f"Unknown source type: {source_type}")
 
@@ -68,6 +71,98 @@ def _preprocess_image(img, target_size, normalize=True):
         return img_normalized
     
     return img_resized
+
+def _load_from_hub(image_config, dataset_name, max_samples, val_split=0.1, **kwargs):
+    """Load images from Hub (ActiveLoop) datasets.
+    
+    Args:
+        image_config: Configuration containing image size
+        dataset_name: Name of Hub dataset ('ffhq', etc.)
+        max_samples: Maximum number of samples to load
+        val_split: Fraction of data to use for validation
+        
+    Returns:
+        Tuple of (train_images, val_images) as numpy arrays
+    """
+    try:
+        import hub
+        print(f"Loading {dataset_name} dataset from Hub...")
+        
+        # Load the dataset
+        if dataset_name.lower() == "ffhq":
+            # Load FFHQ dataset from Hub
+            ds = hub.load("hub://activeloop/ffhq")
+            print(f"FFHQ dataset loaded. Total samples: {len(ds)}")
+            
+            # Limit samples if specified
+            total_samples = min(len(ds), max_samples)
+            indices = np.random.choice(len(ds), total_samples, replace=False)
+            
+            print(f"Processing {total_samples} samples...")
+            processed_images = []
+            
+            for i, idx in enumerate(indices):
+                if i % 1000 == 0:
+                    print(f"Processed {i}/{total_samples} images...")
+                    
+                try:
+                    # Get image from dataset
+                    img_data = ds[int(idx)]
+                    
+                    # Extract image array
+                    if hasattr(img_data, 'images'):
+                        img = img_data.images.numpy()
+                    elif hasattr(img_data, 'image'):
+                        img = img_data.image.numpy()
+                    else:
+                        # If it's just the image directly
+                        img = img_data.numpy()
+                    
+                    # Ensure img is in the right format
+                    if img.dtype == np.uint8:
+                        img = img.astype(np.float32)
+                    
+                    # Preprocess image
+                    processed_img = _preprocess_image(img, image_config.image_size)
+                    processed_images.append(processed_img)
+                    
+                except Exception as e:
+                    print(f"Error processing image {idx}: {e}")
+                    continue
+            
+            print(f"Successfully processed {len(processed_images)} images")
+            
+        else:
+            raise ValueError(f"Unknown Hub dataset: {dataset_name}")
+            
+    except ImportError:
+        print("Warning: hub library not installed. Please install with: pip install hub")
+        print("Falling back to CIFAR-100...")
+        return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+    except Exception as e:
+        print(f"Error loading from Hub: {e}")
+        print("Falling back to CIFAR-100...")
+        return _load_from_tf_builtin(image_config, "cifar100", max_samples)
+    
+    # Split into train and validation sets
+    num_samples = len(processed_images)
+    num_val = int(num_samples * val_split)
+    
+    # Shuffle indices
+    indices = np.random.permutation(num_samples)
+    train_indices = indices[num_val:]
+    val_indices = indices[:num_val]
+    
+    train_images = np.array([processed_images[i] for i in train_indices])
+    val_images = np.array([processed_images[i] for i in val_indices])
+    
+    print(f"Data split complete:")
+    print(f"  Training samples: {len(train_images)}")
+    print(f"  Validation samples: {len(val_images)}")
+    print(f"  Training shape: {train_images.shape}")
+    print(f"  Validation shape: {val_images.shape}")
+    
+    return train_images, val_images
 
 def _load_from_tf_builtin(image_config, dataset_name, max_samples):
     """Load images from TensorFlow's built-in datasets.
